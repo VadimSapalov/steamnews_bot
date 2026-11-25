@@ -3,6 +3,7 @@ const http = require('http');
 const config = require('./config');
 const storage = require('./storage');
 const format = require('./utils/format');
+const dashboard = require('./dashboard');
 
 const MAX_BODY = 10 * 1024;
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -48,6 +49,10 @@ function isValidTime(text) {
 }
 
 async function handleRequest(bot, req, res) {
+  if (dashboard.handle(req, res)) {
+    return;
+  }
+
   if (req.url !== '/events') {
     return sendJson(res, 404, { ok: false, error: 'not found' });
   }
@@ -151,7 +156,11 @@ function start(bot) {
   });
 
   server.listen(config.INGEST_PORT, config.INGEST_HOST, function () {
-    console.log('Приймач тестових подій Steam: http://' + config.INGEST_HOST + ':' + server.address().port + '/events');
+    const base = 'http://' + (config.INGEST_HOST || '127.0.0.1') + ':' + server.address().port;
+    console.log('Приймач тестових подій Steam: ' + base + '/events');
+    if (config.DASHBOARD_TOKEN) {
+      console.log('Веб-дашборд аналітики: ' + base + '/dashboard?token=' + config.DASHBOARD_TOKEN);
+    }
   });
 
   return server;

@@ -7,6 +7,7 @@ const format = require('../utils/format');
 const config = require('../config');
 const broadcaster = require('../broadcast');
 const steamApi = require('../steamAPI');
+const chart = require('../utils/chart');
 
 const helpText = `
 ℹ️ *Довідка з користування ботом*
@@ -53,6 +54,28 @@ function showUserGames(ctx) {
     text += '\n' + format.formatGame(record);
   }
   ctx.replyWithMarkdown(text, mainMenu);
+}
+
+function getGamePoints(hours, gameQuery) {
+  const records = storage.listHistoryLastHours(hours);
+  let targetGame = gameQuery.trim();
+
+  if (!targetGame && records.length > 0) {
+    targetGame = records[0].gameName;
+  }
+
+  const points = [];
+  for (let i = records.length - 1; i >= 0; i--) {
+    if (records[i].gameName.toLowerCase().includes(targetGame.toLowerCase())) {
+      targetGame = records[i].gameName;
+      points.push({
+        time: new Date(records[i].createdAt).getTime(),
+        value: Number(records[i].value) || 0
+      });
+    }
+  }
+
+  return { gameName: targetGame, points };
 }
 
 const registerHandlers = (bot) => {
@@ -216,7 +239,7 @@ const registerHandlers = (bot) => {
     );
   });
 
-//НОВИНИ ТА ЗНИЖКИ================================================================
+//НОВИНИ================================================================
   bot.hears('Новини', (ctx) => {
     userStates.set(ctx.from.id, { step: 'WAITING_FOR_NEWS_QUERY' });
     ctx.reply('Введіть назву гри, щоб переглянути останню новину та знижку в Steam (або /cancel):');
@@ -232,6 +255,70 @@ const registerHandlers = (bot) => {
 
   bot.hears('Перевірити оновлення', (ctx) => handleCheckUpdates(ctx));
   bot.command('checkupdates', (ctx) => handleCheckUpdates(ctx));
+
+  bot.command('trend', (ctx) => {
+    const parts = ctx.message.text.split(' ');
+    const hours = Number(parts[1]) || 24;
+
+    if (hours < 1 || hours > 168) {
+      return ctx.reply('Формат: /trend <години> [назва_гри], наприклад: /trend 24 Cyberpunk');
+    }
+
+    const gameQuery = parts.slice(2).join(' ');
+    const { gameName, points } = getGamePoints(hours, gameQuery);
+
+    if (points.length < 2) {
+      return ctx.reply('Для побудови тренду потрібно щонайменше 2 заміри знижок за цей період.');
+    }
+
+    const sampled = chart.downsample(points, 24);
+    const values = sampled.map(p => p.value);
+    let min = points[0].value;
+    let max = points[0].value;
+
+    for (const p of points) {
+      if (p.value < min) min = p.value;
+      if (p.value > max) max = p.value;
+    }
+
+    const text = `📈 *Тренд знижок: ${format.escapeMd(gameName)}* (за ${hours} год)\n`
+      + `\`${chart.sparkline(values)}\`\n`
+      + `Замірів: ${points.length} · Мін: *-${min}%* · Макс: *-${max}%*`;
+
+    return ctx.reply(text, { parse_mode: 'Markdown' });
+  });
+
+  bot.command('chart', async (ctx) => {
+    const parts = ctx.message.text.split(' ');
+    const hours = Number(parts[1]) || 24;
+
+    if (hours < 1 || hours > 168) {
+      return ctx.reply('Формат: /chart <години> [назва_гри], наприклад: /chart 24 Cyberpunk');
+    }
+
+    const gameQuery = parts.slice(2).join(' ');
+    const { gameName, points } = getGamePoints(hours, gameQuery);
+
+    if (points.length < 2) {
+      return ctx.reply('Для побудови графіка потрібно щонайменше 2 заміри знижок за цей період.');
+    }
+
+    const sampled = chart.downsample(points, 300);
+    const image = chart.chartToPng(sampled, {
+      min: config.DISCOUNT_LOW || 20,
+      max: config.DISCOUNT_HIGH || 70
+    });
+
+    try {
+      await ctx.replyWithPhoto({ source: image }, {
+        caption: `📊 Динаміка знижок: ${gameName} (за ${hours} год, точок: ${points.length})\n`
+          + `Зелений маркер - мінімум, червоний - максимум, пунктир - цільовий діапазон (${config.DISCOUNT_LOW || 20}%–${config.DISCOUNT_HIGH || 70}%).`
+      });
+    } catch (error) {
+      console.error('chart:', error.message);
+      ctx.reply('Не вдалося надіслати графік. Спробуйте пізніше.');
+    }
+  });
 
 //ОБРОБНИК ПОКРОКОВИХ ДІАЛОГІВ====================================================
   bot.on('text', async (ctx, next) => {

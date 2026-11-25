@@ -23,6 +23,11 @@ const INGEST_PORT = Number(process.env.INGEST_PORT) || 3000;
 const INGEST_HOST = '127.0.0.1';
 const INGEST_URL = 'http://' + INGEST_HOST + ':' + INGEST_PORT + '/events';
 
+const DASHBOARD_TOKEN = process.env.DASHBOARD_TOKEN || '';
+const DASHBOARD_REFRESH_S = 30;
+const DISCOUNT_LOW = 20;
+const DISCOUNT_HIGH = 70;
+
 module.exports = {
   token: process.env.BOT_TOKEN,
   DATA_FILE,
@@ -37,5 +42,9 @@ module.exports = {
   INGEST_KEY,
   INGEST_PORT,
   INGEST_HOST,
-  INGEST_URL
+  INGEST_URL,
+  DASHBOARD_TOKEN,
+  DASHBOARD_REFRESH_S,
+  DISCOUNT_LOW,
+  DISCOUNT_HIGH
 };

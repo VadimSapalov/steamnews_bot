@@ -41,6 +41,11 @@ async function checkAllTrackedGames(bot) {
           steamApi.fetchStoreDetails(appId).catch(() => null)
         ]);
 
+        if (details && records.length > 0) {
+          const currentDiscount = Number(details.discountPercent) || 0;
+          storage.recordDiscountPoint(appId, records[0].gameName, currentDiscount);
+        }
+
         for (let record of records) {
           let updatedNewsDate = record.lastNewsDate;
           let updatedDiscount = record.lastDiscount;

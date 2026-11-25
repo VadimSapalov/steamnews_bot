@@ -6,7 +6,8 @@ const config = require('./config');
 let data = {
   users: {},
   games: [],
-  lastGameID: 0
+  lastGameID: 0,
+  history: []
 };
 
 function loadData() {
@@ -17,6 +18,7 @@ function loadData() {
     data.users = parsed.users && typeof parsed.users === 'object' ? parsed.users : {};
     data.games = Array.isArray(parsed.games) ? parsed.games : [];
     data.lastGameID = Number(parsed.lastGameID) || 0;
+    data.history = Array.isArray(parsed.history) ? parsed.history : [];
 
     console.log('Дані успішно завантажені з data.json');
   } catch (err) {
@@ -162,6 +164,46 @@ function deleteGame(id) {
   return removed;
 }
 
+function recordDiscountPoint(appId, gameName, discountPercent, createdAt = new Date().toISOString()) {
+  if (!Array.isArray(data.history)) {
+    data.history = [];
+  }
+  data.history.push({
+    appId: Number(appId),
+    gameName: String(gameName),
+    value: Number(discountPercent) || 0,
+    createdAt
+  });
+  if (data.history.length > 2000) {
+    data.history = data.history.slice(-2000);
+  }
+  saveChanges(data);
+}
+
+function latestByGame() {
+  const result = Object.create(null);
+  const list = Array.isArray(data.history) ? data.history : [];
+  for (let item of list) {
+    if (item.gameName) {
+      result[item.gameName] = item;
+    }
+  }
+  return result;
+}
+
+function listHistoryLastHours(hours, nowMs = Date.now()) {
+  const cutoff = nowMs - hours * 60 * 60 * 1000;
+  const list = Array.isArray(data.history) ? data.history : [];
+  const recent = [];
+  for (let i = list.length - 1; i >= 0; i--) {
+    const t = new Date(list[i].createdAt).getTime();
+    if (t >= cutoff) {
+      recent.push(list[i]);
+    }
+  }
+  return recent;
+}
+
 module.exports = {
   loadData,
   saveUser,
@@ -173,5 +215,8 @@ module.exports = {
   listUserGames,
   updateGame,
   updateGameTrackingState,
-  deleteGame
+  deleteGame,
+  recordDiscountPoint,
+  latestByGame,
+  listHistoryLastHours
 };
